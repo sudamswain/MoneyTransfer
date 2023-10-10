@@ -4,9 +4,7 @@ import com.dws.challenge.domain.Account;
 import com.dws.challenge.dto.TransferDto;
 import com.dws.challenge.exception.CustomAccountIdException;
 import com.dws.challenge.repository.AccountsRepository;
-import com.sun.jdi.InternalException;
 import lombok.Getter;
-import lombok.extern.log4j.Log4j;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -42,37 +40,53 @@ public class AccountsService {
         return this.accountsRepository.getAccount(accountId);
     }
 
-
-
     public boolean transferMoney(TransferDto transferDto) throws Exception {
-        Object lock1 = new Object();
-        Object lock2 = new Object();
         if (transferDto.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new Exception("amount should not negative"); // Invalid amount
+            throw new Exception("Amount should not be negative"); // Invalid amount
         }
 
         Account from = this.accountsRepository.getAccount(transferDto.getFromAccountId());
         Account to = this.accountsRepository.getAccount(transferDto.getToAccountId());
+
         if (from == null) {
-            throw new CustomAccountIdException("from account is not available");
+            throw new CustomAccountIdException("From account is not available");
         }
         if (to == null) {
-            throw new CustomAccountIdException("to account is not available");
-        }
-        if (from.getBalance().compareTo(transferDto.getAmount()) < 0) {
-            throw new CustomAccountIdException("balance less than amount");
+            throw new CustomAccountIdException("To account is not available");
         }
 
-        synchronized (from) {
-            synchronized (to) {
-                from.withdraw(transferDto.getAmount());
-                to.deposit(transferDto.getAmount());
-                String fromMessage = "Transferred $" + transferDto.getAmount() + " to account " + to.getAccountId();
-                String toMessage = "Received $" + transferDto.getAmount() + " from account " + from.getAccountId();
+        BigDecimal transferAmount = transferDto.getAmount();
+
+        // Sort accounts to acquire locks in a consistent order
+        Account firstAccount;
+        Account secondAccount;
+
+        if (from.getAccountId().compareTo(to.getAccountId()) < 0) {
+            firstAccount = from;
+            secondAccount = to;
+        } else {
+            firstAccount = to;
+            secondAccount = from;
+        }
+
+        synchronized (firstAccount.getLock()) {
+            synchronized (secondAccount.getLock()) {
+                if (from.getBalance().compareTo(transferAmount) < 0) {
+                    throw new CustomAccountIdException("Balance is less than the transfer amount");
+                }
+
+                from.withdraw(transferAmount);
+                to.deposit(transferAmount);
+
+                String fromMessage = "Transferred " + transferAmount + " to account " + to.getAccountId();
+                String toMessage = "Received " + transferAmount + " from account " + from.getAccountId();
+
                 notificationService.notifyAboutTransfer(from, fromMessage);
                 notificationService.notifyAboutTransfer(to, toMessage);
+
                 return true; // Transfer successful
             }
         }
     }
+
 }
