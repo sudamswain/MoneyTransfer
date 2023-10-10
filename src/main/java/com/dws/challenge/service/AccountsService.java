@@ -40,6 +40,7 @@ public class AccountsService {
         return this.accountsRepository.getAccount(accountId);
     }
 
+
     public boolean transferMoney(TransferDto transferDto) throws Exception {
         if (transferDto.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new Exception("Amount should not be negative"); // Invalid amount
@@ -88,5 +89,4 @@ public class AccountsService {
             }
         }
     }
-
 }
